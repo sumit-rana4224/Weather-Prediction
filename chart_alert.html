@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tomorrow.io Weather Forecast + Alerts</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      padding: 20px;
+    }
+    h2 {
+      color: #333;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 15px;
+      margin: 10px 0;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .alert-box {
+      background-color: #ffe4e1;
+      color: #b22222;
+      border: 1px solid #b22222;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    canvas {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>🌦️ Weather Forecast with Alerts</h2>
+  <input id="locationInput" type="text" placeholder="Enter Location (e.g. Kolkata)">
+  <button onclick="getWeather()">Search</button>
+
+  <div id="alertContainer"></div>
+  <div id="weatherData"></div>
+  <canvas id="weatherChart" width="600" height="300"></canvas>
+
+  <script>
+    const apiKey = "lbnwzTs4IFYzQcfFGSoaAADzmckNWWzw"; // Replace with your Tomorrow.io API key
+    let chartRef = null;
+
+    async function getCoordinates(location) {
+      const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${location}`);
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        return {
+          lat: data.results[0].latitude,
+          lon: data.results[0].longitude
+        };
+      } else {
+        throw new Error("Location not found.");
+      }
+    }
+
+    async function getWeather() {
+      const location = document.getElementById("locationInput").value;
+      const weatherDiv = document.getElementById("weatherData");
+      const alertBox = document.getElementById("alertContainer");
+      weatherDiv.innerHTML = "Loading...";
+      alertBox.innerHTML = "";
+
+      try {
+        const { lat, lon } = await getCoordinates(location);
+        const url = `https://api.tomorrow.io/v4/weather/forecast?location=${lat},${lon}&apikey=${apiKey}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.timelines || !data.timelines.daily) {
+          throw new Error("No forecast data found.");
+        }
+
+        const timeline = data.timelines.daily;
+
+        const labels = [];
+        const temps = [];
+        const humidities = [];
+        const winds = [];
+
+        const globalAlerts = [];
+
+        weatherDiv.innerHTML = `<h3>📍 7-Day Forecast for ${location}</h3>`;
+
+        timeline.forEach(day => {
+          const date = day.time.split("T")[0];
+          const { temperatureAvg, humidityAvg, windGustAvg } = day.values;
+
+          labels.push(date);
+          temps.push(temperatureAvg);
+          humidities.push(humidityAvg);
+          winds.push(windGustAvg);
+
+          let alertMessages = [];
+
+          if (temperatureAvg > 20) alertMessages.push("🔥 Extreme heat alert!");
+          if (humidityAvg > 80) alertMessages.push("💧 High humidity alert!");
+          if (windGustAvg >40) alertMessages.push("🌪️ Strong wind alert!");
+
+          if (alertMessages.length > 0) {
+            globalAlerts.push(`🚨 ${date}: ${alertMessages.join(" | ")}`);
+          }
+
+          const alertHTML = alertMessages.length
+            ? `<div style="color:red;"><strong>⚠️ Alerts:</strong><ul>${alertMessages.map(msg => `<li>${msg}</li>`).join("")}</ul></div>`
+            : "";
+
+          weatherDiv.innerHTML += `
+            <div class="card">
+              <strong>Date:</strong> ${date}<br>
+              🌡️ Avg Temp: ${temperatureAvg} °C<br>
+              💧 Avg Humidity: ${humidityAvg} %<br>
+              💨 Avg Wind Gust: ${windGustAvg} km/h
+              ${alertHTML}
+            </div>
+          `;
+        });
+
+        if (globalAlerts.length > 0) {
+          alertBox.innerHTML = `
+            <div class="alert-box">
+              <strong>🚨 Weather Alerts:</strong>
+              <ul>${globalAlerts.map(msg => `<li>${msg}</li>`).join("")}</ul>
+            </div>
+          `;
+        }
+
+        renderChart(labels, temps, humidities, winds);
+
+      } catch (err) {
+        console.error(err);
+        weatherDiv.innerHTML = `<p style="color:red;">❌ ${err.message}</p>`;
+      }
+    }
+
+    function renderChart(labels, temps, humidities, winds) {
+      const ctx = document.getElementById("weatherChart").getContext("2d");
+
+      if (chartRef) {
+        chartRef.destroy();
+      }
+
+      chartRef = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "🌡️ Temp (°C)",
+              data: temps,
+              borderColor: "red",
+              fill: false
+            },
+            {
+              label: "💧 Humidity (%)",
+              data: humidities,
+              borderColor: "blue",
+              fill: false
+            },
+            {
+              label: "💨 Wind Gust (km/h)",
+              data: winds,
+              borderColor: "green",
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: "7-Day Weather Trend"
+            }
+          }
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>
